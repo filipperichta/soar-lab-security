@@ -26,15 +26,10 @@ Atomic Red Team       Wazuh Agent          Splunk              Shuffle SOAR
 |---|---|---|
 | `win-endpoint` | Target | Windows 11, Wazuh agent, ART installed |
 | `soc-stack` | SOC VM | Splunk + Wazuh + Shuffle on Ubuntu |
-| Atomic Red Team | Attack simulation | Invoke-AtomicRedTeam PowerShell module |
-| Wazuh | EDR / XDR | Script Block Logging via Event ID 4104 |
-| Splunk | SIEM | `wazuh-alerts` index, custom SPL rules |
+| Atomic Red Team | Attack simulation | Invoke-AtomicRedTeam module |
+| Wazuh | EDR / XDR | Script Block Logging, Event ID 4104 |
+| Splunk | SIEM | wazuh-alerts index, custom SPL rules |
 | Shuffle SOAR | Automation | Playbooks triggered by Splunk alerts |
-
-**Key configuration on `win-endpoint`:**
-- PowerShell Script Block Logging enabled via registry
-- Wazuh agent configured to collect `Microsoft-Windows-PowerShell/Operational` channel
-- Both settings provisioned automatically via `vagrant provision win-endpoint`
 
 ---
 
@@ -48,55 +43,51 @@ Atomic Red Team       Wazuh Agent          Splunk              Shuffle SOAR
 | **Technique** | T1059.001 — Command and Scripting Interpreter: PowerShell |
 | **ATT&CK** | [attack.mitre.org/techniques/T1059/001](https://attack.mitre.org/techniques/T1059/001/) |
 | **ART Test** | T1059.001-1 Mimikatz |
-| **Wazuh Rule** | 91822 — level 12 (high severity) |
-| **Windows Event** | ID 4104 — PowerShell Script Block Logging |
+| **Wazuh Rule** | 91822 — level 12 |
+| **Windows Event** | ID 4104 — Script Block Logging |
 | **IR Report** | [ir-reports/T1059.001-powershell-execution.md](ir-reports/T1059.001-powershell-execution.md) |
 
 #### What was simulated
 
-Atomic Red Team test `T1059.001-1` executed on the Windows 11 endpoint via elevated PowerShell. The test uses `Invoke-Command` to execute sub-scripts, simulating adversary PowerShell abuse used to run malicious payloads while evading basic command-line detection.
+Atomic Red Team test T1059.001-1 executed on the Windows 11 endpoint using `Invoke-Command` to run sub-scripts — simulating adversary PowerShell abuse commonly used to execute malicious payloads while evading basic process monitoring.
 
-**Command:**
 ```powershell
 Import-Module invoke-atomicredteam
 Invoke-AtomicTest T1059.001 -TestNumbers 1
 ```
 
-#### 1. ART Execution — `vagrant powershell --elevated`
+#### ART Execution
 
-![ART T1059.001 executing successfully on win-endpoint](assets/t1059-art-execution.png)
+![Atomic Red Team T1059.001 executing on win-endpoint](assets/t1059-art-execution.png)
 
-*Atomic Red Team T1059.001-1 Mimikatz — executed successfully with output code 0 on win-endpoint*
+*Atomic Red Team T1059.001-1 Mimikatz executing successfully on win-endpoint via `vagrant powershell --elevated`*
 
----
+#### Detection in Wazuh
 
-#### 2. Detection in Wazuh — Threat Hunting
+Wazuh captured the full PowerShell script block via **Event ID 4104** and fired multiple rules within 2 seconds of execution:
 
-Wazuh captured the PowerShell activity via **Event ID 4104** (Script Block Logging) and fired multiple rules within 2 seconds:
-
-| Rule ID | Description | Level |
+| Rule ID | Description | Severity |
 |---|---|---|
-| **91822** | PowerShell script used "Invoke-command" cmdlet to execute sub script | **12** |
-| **91809** | PowerShell script may be using Base64 decoding method | **10** |
-| 91820 | PowerShell script recursively collected files from filesystem search | 4 |
-| 91819 | PowerShell script searching filesystem | 4 |
-| 91816 | PowerShell script querying system environment variables | 4 |
+| **91822** | PowerShell script used "Invoke-command" cmdlet to execute sub script | **Level 12** |
+| **91809** | PowerShell script may be using Base64 decoding method | **Level 10** |
+| 91820 | PowerShell script recursively collected files from filesystem search | Level 4 |
+| 91819 | PowerShell script searching filesystem | Level 4 |
+| 91816 | PowerShell script querying system environment variables | Level 4 |
 
-![Wazuh Threat Hunting showing PowerShell detections on win-endpoint](assets/t1059-wazuh-alerts.png)
+![Wazuh Threat Hunting showing PowerShell detections](assets/t1059-wazuh-alerts.png)
 
-*Wazuh Threat Hunting — multiple PowerShell rules firing on win-endpoint including rule 91822 at severity level 12*
+*Wazuh Threat Hunting — rule 91822 firing at severity level 12 on win-endpoint*
 
----
+#### Detection in Splunk
 
-#### 3. Detection in Splunk — wazuh-alerts index
+Alert forwarded from Wazuh to Splunk via Universal Forwarder. Full `scriptBlockText` preserved in the event — complete visibility into what PowerShell code executed.
 
-Alert forwarded from Wazuh to Splunk via Universal Forwarder. The SPL query filters on Event ID 4104 and Wazuh rules 91822 and 91809, returning **12 events** confirming detection. The full `scriptBlockText` is preserved in each event, giving analysts complete visibility into what PowerShell code executed.
+![Splunk event showing full Wazuh alert for T1059.001](assets/t1059-splunk-event.png)
 
-![Splunk search results showing Wazuh alert for T1059.001](assets/t1059-splunk-event.png)
+*Splunk wazuh-alerts index — Event ID 4104 with complete scriptBlockText captured*
 
-*Splunk — SPL detection query returning 12 events with MITRE ATT&CK mapping (T1059.001, Execution, PowerShell) visible in the event fields*
+#### SPL Detection Rule
 
-**SPL Detection Rule:**
 ```spl
 index=wazuh-alerts
   "data.win.system.channel"="Microsoft-Windows-PowerShell/Operational"
@@ -118,7 +109,6 @@ Full rule: [`splunk/detections/T1059.001-powershell-scriptblock.spl`](splunk/det
 |---|---|
 | **Tactic** | Credential Access |
 | **Technique** | T1003.001 — OS Credential Dumping: LSASS Memory |
-| **ATT&CK** | [attack.mitre.org/techniques/T1003/001](https://attack.mitre.org/techniques/T1003/001/) |
 | **Status** | Planned |
 
 ---
@@ -129,42 +119,17 @@ Full rule: [`splunk/detections/T1059.001-powershell-scriptblock.spl`](splunk/det
 |---|---|
 | **Tactic** | Persistence |
 | **Technique** | T1547.001 — Boot or Logon Autostart Execution: Registry Run Keys |
-| **ATT&CK** | [attack.mitre.org/techniques/T1547/001](https://attack.mitre.org/techniques/T1547/001/) |
 | **Status** | Planned |
-
----
-
-## Repository Structure
-
-```
-soar-lab-security/
-├── assets/                                    # Screenshots
-│   ├── t1059-art-execution.png
-│   ├── t1059-wazuh-alerts.png
-│   └── t1059-splunk-event.png
-├── atomic-red-team/
-│   └── setup.ps1                              # ART installation script
-├── splunk/
-│   └── detections/
-│       └── T1059.001-powershell-scriptblock.spl
-├── shuffle/
-│   └── workflows/                             # Coming soon
-├── ir-reports/
-│   ├── TEMPLATE.md
-│   └── T1059.001-powershell-execution.md
-└── docs/
-    └── attack-matrix.md
-```
 
 ---
 
 ## Running Tests
 
 ```cmd
-# From soar-lab directory on host machine
+# Run a test (from soar-lab directory on host)
 vagrant powershell win-endpoint --elevated --command "Import-Module invoke-atomicredteam; Invoke-AtomicTest T1059.001 -TestNumbers 1"
 
-# Clean up after test
+# Clean up after
 vagrant powershell win-endpoint --elevated --command "Import-Module invoke-atomicredteam; Invoke-AtomicTest T1059.001 -TestNumbers 1 -Cleanup"
 ```
 
@@ -172,5 +137,5 @@ vagrant powershell win-endpoint --elevated --command "Import-Module invoke-atomi
 
 ## Related
 
-- [soar-lab](https://github.com/filipperichta/soar-lab) — Infrastructure repo (Vagrant, Splunk, Wazuh, Shuffle)
+- [soar-lab](https://github.com/filipperichta/soar-lab) — Infrastructure repo
 - [filipperichta.github.io](https://filipperichta.github.io) — Portfolio site with full writeups
