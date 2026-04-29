@@ -146,7 +146,7 @@ Technique:   $exec.result.rule.mitre.id
 Timestamp:   $exec.result.timestamp
 
 INVESTIGATION SOP:
-https://github.com/filipperichta/soar-lab-security/blob/main/ir-reports/T1059.001-powershell-execution.md
+https://github.com/filipperichta/soar-lab-security/ir-reports/T1059.001-powershell-execution.md
 
 SPLUNK RESULTS:
 $exec.results_link
