@@ -1,0 +1,21 @@
+| Comment -----------------------------------------------------------------------
+| Detection: T1059.001 - PowerShell Script Block Execution
+| ATT&CK:    T1059.001 - Command and Scripting Interpreter: PowerShell
+| Tactic:    Execution
+| Source:    Wazuh agent on win-endpoint → Splunk wazuh-alerts index
+| Rule IDs:  91822 (level 12), 91809 (level 10)
+| Author:    Filip Perichta
+| Repo:      soar-lab-security
+| -----------------------------------------------------------------------
+
+
+
+index=wazuh-alerts
+    "data.win.system.channel"="Microsoft-Windows-PowerShell/Operational"
+    "data.win.system.eventID"=4104
+    (rule.id=91822 OR rule.id=91809)
+| eval technique="T1059.001"
+| eval tactic="Execution"
+| table _time, agent.name, agent.ip, rule.id, rule.description,
+        rule.level, data.win.eventdata.scriptBlockText, technique, tactic
+| sort -_time
